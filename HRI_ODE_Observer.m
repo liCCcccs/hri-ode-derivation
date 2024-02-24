@@ -94,6 +94,28 @@ vSym.D_AFz = 100; vSym.D_AFx = 100; vSym.D_AMy = 10;
 vSym.D_BFz = 100; vSym.D_BFx = 100; vSym.D_BMy = 10;
 vSym.D_CFz = 100; vSym.D_CFx = 100; vSym.D_CMy = 10;
 
+
+% Wrong model parameter
+vSym_est.m1 = 7.275;
+vSym_est.m2 = 3.75;
+vSym_est.m3 = 2;
+vSym_est.m4 = 2;
+vSym_est.g = 10;
+vSym_est.I_G1z = 0.121; vSym_est.I_G2z = 0.055; vSym_est.I_G3z = 0.02; vSym_est.I_G4z = 0.02; 
+vSym_est.l1 = 0.4; vSym_est.l2 = 0.4; vSym_est.l3 = 0.2; vSym_est.l4 = 0.4;
+vSym_est.lc1 = 0.173; vSym_est.la1 = 0.2; vSym_est.lb1 = 0.2; vSym_est.lc2 = 0.173; 
+vSym_est.lc3 = 0.1; vSym_est.lc4 = 0.2; vSym_est.la4 = 0.2; vSym_est.la2 = 0.2; 
+vSym_est.K_AFz = 3000; vSym_est.K_AFx = 2000; vSym_est.K_AMy = 50;
+vSym_est.K_BFz = 3000; vSym_est.K_BFx = 2000; vSym_est.K_BMy = 500;
+
+vSym_est.K_AFzN3 = 30000*5; vSym_est.K_AFxN3 = 20000*5; vSym_est.K_AMyN3 = 100;
+vSym_est.K_BFzN3 = 30000*5; vSym_est.K_BFxN3 = 20000*5; vSym_est.K_BMyN3 = 100;
+
+vSym_est.K_CFz = 24000; vSym_est.K_CFx = 12000; vSym_est.K_CMy = 200;
+vSym_est.D_AFz = 100; vSym_est.D_AFx = 100; vSym_est.D_AMy = 10;
+vSym_est.D_BFz = 100; vSym_est.D_BFx = 100; vSym_est.D_BMy = 10;
+vSym_est.D_CFz = 100; vSym_est.D_CFx = 100; vSym_est.D_CMy = 10;
+
 %% test
 % t = 0;
 % y0 = [q1, dq1, -pi/2, 0, 0, 0, 0, 0, 0, 0, -pi/2, 0];  %initial condition
@@ -115,17 +137,50 @@ syms x_eq; % Define x_eq as symbolic variable
 equation = vSym.K_AFz * x_eq + vSym.K_BFx * x_eq == (vSym.m3 + vSym.m4) * vSym.g;
 x_eq_val = double(solve(equation, x_eq))
 %% solve the dynamic equations
-tspan = [0 :0.04: 2];
+tspan = [0 :0.04: 4];
 %tspan = 0:0.05:1;
 y0 = [q1, dq1, -pi/2, 0, 0, 0, x_eq_val, 0, 0, 0, -pi/2, 0];  %initial condition
 tau = [0, 0, 0, 0];
-[t,y] = ode23(@(t,y) runrobot(t,y, tau, vSym), tspan, y0);
+y = zeros(length(tspan), length(y0));
+y(1, :) = y0;
+for i = 2:length(tspan)
+    ts = [0, 0.04];
+    y0 = y(i-1, :);
+    [t_tmp,y_tmp] = ode23(@(t_tmp,y_tmp) runrobot(t_tmp,y_tmp, tau, vSym), ts, y0);
+    y(i, :) = y_tmp(end, :);
+end
+
+% tspan = [0 :0.04: 2];
+% % tspan = 0:0.05:1;
+% y0 = [q1, dq1, -pi/2, 0, 0, 0, x_eq_val, 0, 0, 0, -pi/2, 0];  %initial condition
+% tau = [0, 0, 0, 0];
+% [t,y] = ode23(@(t,y) runrobot(t,y, tau, vSym), tspan, y0);
+
+%% observer
+tspan = [0 :0.04: 4];
+%tspan = 0:0.05:1;
+y0 = [q1, dq1, -pi/2, 0, 0, 0, x_eq_val, 0, 0, 0, -pi/2, 0];  %initial condition
+tau = [0, 0, 0, 0];
+y_ob = zeros(length(tspan), length(y0));
+y_ob(1, :) = y0;
+%tspan = 0:0.05:1;
+for i = 2:length(tspan)
+    ts = [0, 0.04];
+    y0 = y_ob(i-1, :);
+    y_true = y(i, :);
+    [t_tmp,y_tmp] = ode23(@(t_tmp,y_tmp) runobserver(t_tmp,y_tmp, tau, vSym_est, y_true), ts, y0);
+    y_ob(i, :) = y_tmp(end, :);
+end
+
+% y0 = [q1, dq1, -pi/2, 0, 0, 0, x_eq_val, 0, 0, 0, -pi/2, 0];  %initial condition
+% tau = [0, 0, 0, 0];
+% [t_ob,y_ob] = ode23(@(t,y) runrobot(t,y, tau, vSym_est), tspan, y0);
 
 %% Plot trajectory
-figure('Renderer', 'painters', 'Position', [300 300 800 800])
-plot(t, y(:, [3, 11]))
-legend(["h th", "r th"])
-% 
+% figure('Renderer', 'painters', 'Position', [300 300 800 800])
+% plot(t, y(:, [3, 11]))
+% legend(["h th", "r th"])
+% % 
 % q1 = y(:, 1); h_q2 = y(:, 3); r_d2 = y(:, 5); r_d3 = y(:, 7); r_q4 = y(:, 9); r_q5 = y(:, 11);
 % dq1 = y(:, 2); h_dq2 = y(:, 4); r_dd2 = y(:, 6); r_dd3 = y(:, 8); r_dq4 = y(:, 10); r_dq5 = y(:, 12);
 % 
@@ -168,9 +223,14 @@ legend(["h th", "r th"])
 % save('hri_data.mat', 'hri_data')
 
 %% Visualise
+figure('Renderer', 'painters', 'Position', [300 300 800 800])
+
 dt = 0.04;
 q1 = y(:, 1); h_q2 = y(:, 3); r_d2 = y(:, 5); r_d3 = y(:, 7); r_q4 = y(:, 9); r_q5 = y(:, 11);
 dq1 = y(:, 2); h_dq2 = y(:, 4); r_dd2 = y(:, 6); r_dd3 = y(:, 8); r_dq4 = y(:, 10); r_dq5 = y(:, 12);
+
+q1_est = y_ob(:, 1); h_q2_est = y_ob(:, 3); r_d2_est = y_ob(:, 5); r_d3_est = y_ob(:, 7); r_q4_est = y_ob(:, 9); r_q5_est = y_ob(:, 11);
+dq1_est = y_ob(:, 2); h_dq2_est = y_ob(:, 4); r_dd2_est = y_ob(:, 6); r_dd3_est = y_ob(:, 8); r_dq4_est = y_ob(:, 10); r_dq5_est = y_ob(:, 12);
 
 symbols = {m1, m2, m3, m4, g, I_G1z, I_G2z, I_G3z, I_G4z, ...
            l1, l2, l3, l4,...
@@ -209,11 +269,14 @@ f_intB = zeros(2, length(y));
     
 
 %figure('Renderer', 'painters', 'Position', [300 300 600 500])
-v = VideoWriter('Against10Nm_Neg.avi', 'Motion JPEG AVI');
-v.FrameRate = 25;
-open(v);
+%v = VideoWriter('Against10Nm_Neg.avi', 'Motion JPEG AVI');
+%v.FrameRate = 25;
+%open(v);
 for i = 1:length(y)
     [j1, h_j2, h_j3, r_j2, r_j3, r_j4, r_j5, r_j6, h_cuff_A, h_cuff_B, h_cuff_C, r_cuff_B, T] = calc_joint_position(vSym, q1(i), h_q2(i), r_d2(i), r_d3(i), r_q4(i), r_q5(i));
+
+    [j1_est, h_j2_est, h_j3_est, r_j2_est, r_j3_est, r_j4_est, r_j5_est, r_j6_est, h_cuff_A_est, h_cuff_B_est, h_cuff_C_est, r_cuff_B_est, T_est] = calc_joint_position(vSym_est, q1_est(i), h_q2_est(i), r_d2_est(i), r_d3_est(i), r_q4_est(i), r_q5_est(i));
+
 
     clf
     plot_2d_links({j1, h_j2, h_j3}, '-');
@@ -224,13 +287,19 @@ for i = 1:length(y)
     colors = ['b', 'b', 'b', 'r', 'r', 'r'];
     plot_point({h_cuff_A, h_cuff_B, h_cuff_C, r_j3, r_cuff_B, r_j6}, colors)
 
+    plot_2d_links({j1_est, h_j2_est, h_j3_est}, '--');
+    plot_2d_links({r_j3_est, r_j4_est, r_j5_est, r_j6_est}, '--');
+    plot_2d_links({h_cuff_A_est, r_j3_est}, ':');
+    plot_2d_links({h_cuff_B_est, r_cuff_B_est}, ':');
+    plot_2d_links({h_cuff_C_est, r_j6_est}, ':');
+
 
     view(0, 90)
     legend("Human", "Robot")
 
     axis([-0.2,0.8,-0.6,0.4, -1,1])
-    frame = getframe(gcf); 
-    writeVideo(v, frame);
+    %frame = getframe(gcf); 
+    %writeVideo(v, frame);
     pause(dt)
 end
 close(v);
@@ -261,6 +330,53 @@ function dydt = runrobot(t, y, tau, vSym)
     %ddq1 = calc_equation_of_motion(ddthetaSolved.ddq1, symbols, vSym, vVar);
     ddq1 = 0;
     [h_ddq2, r_ddd2, r_ddd3, r_ddq4, r_ddq5] = calc_equation_of_motion(vSym, vVar);
+
+    dydt = zeros(12,1);
+    dydt(1) = vVar.dq1; dydt(2) = ddq1;
+    dydt(3) = vVar.h_dq2; dydt(4) = h_ddq2;
+    dydt(5) = vVar.r_dd2; dydt(6) = r_ddd2;
+    dydt(7) = vVar.r_dd3; dydt(8) = r_ddd3;
+    dydt(9) = vVar.r_dq4; dydt(10) = r_ddq4;
+    dydt(11) = vVar.r_dq5; dydt(12) = r_ddq5;
+end
+
+function dydt = runobserver(t, y, tau, vSym, y_true)
+
+    vVar.q1 = y(1); vVar.dq1 = y(2); 
+    vVar.h_q2 = y(3); vVar.h_dq2 = y(4);
+    vVar.r_d2 = y(5); vVar.r_dd2 = y(6);
+    vVar.r_d3 = y(7); vVar.r_dd3 = y(8);
+    vVar.r_q4 = y(9); vVar.r_dq4 = y(10);
+    vVar.r_q5 = y(11); vVar.r_dq5 = y(12); 
+
+    vVar.tau1 = tau(1); vVar.tau3 = tau(3);
+    if t < 4
+        %vVar.tau2 = -20;
+        vVar.tau2 = -19;
+        vVar.tau4 = 23;
+    else
+        vVar.tau2 = 0;
+        vVar.tau4 = 0;
+    end
+
+    % Luenburger observer with 1 measurement (theta_r)
+    L = [1,1,1,1,1]*10;
+    ddq1 = 0;
+    r_q5_true = y_true[11];
+    [h_ddq2, r_ddd2, r_ddd3, r_ddq4, r_ddq5] = calc_equation_of_motion(vSym, vVar);
+    h_ddq2 = h_ddq2 + L(1) * (y_true - vVar.r_q5);
+    r_ddd2 = r_ddd2 + L(2) * (y_true - vVar.r_q5);
+    r_ddd3 = r_ddd3 + L(3) * (y_measure - vVar.r_q5);
+    r_ddq4 = r_ddq4 + L(4) * (y_measure - vVar.r_q5);
+    r_ddq5 = r_ddq5 + L(5) * (y_measure - vVar.r_q5);
+
+    % Luenburger observer with 7 measurement (theta_r, F_int)
+    L = ones(5,5)*10;
+    [h_ddq2, r_ddd2, r_ddd3, r_ddq4, r_ddq5] = calc_equation_of_motion(vSym, vVar);  % estimation
+
+
+
+
 
     dydt = zeros(12,1);
     dydt(1) = vVar.dq1; dydt(2) = ddq1;
