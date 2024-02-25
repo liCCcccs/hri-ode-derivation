@@ -535,7 +535,7 @@ function animate_true_obsv(vSym, vSym_est, y, y_ob, dt, is_save)
         plot_2d_links({h_cuff_A, r_j3}, ':', deft_color(3, :));
         plot_2d_links({h_cuff_B, r_cuff_B}, ':', deft_color(3, :));
         plot_2d_links({h_cuff_C, r_j6}, ':', deft_color(3, :));
-        colors = [[0, 0.4470, 0.7410]; [0, 0.4470, 0.7410]; [0, 0.4470, 0.7410]; [0.8500, 0.3250, 0.0980]; [0.8500, 0.3250, 0.0980]; [0.8500, 0.3250, 0.0980]];
+        colors = [[0, 0.4470, 0.7410]; [0, 0.4470, 0.7410]; [0, 0.4470, 0.7410]; 'r', 'r', 'r'];
         plot_point({h_cuff_A, h_cuff_B, h_cuff_C, r_j3, r_cuff_B, r_j6}, colors)
     
         plot_2d_links({j1_est, h_j2_est, h_j3_est}, '--', deft_color(1, :));
@@ -577,7 +577,7 @@ function plot_point(points, colors)
         hold on;
         xs(i) = points{i}(1);
         ys(i) = points{i}(2);
-        scatter(xs(i), ys(i), 'LineWidth', 2, 'MarkerEdgeColor', colors(i, :));
+        scatter(xs(i), ys(i), 'LineWidth', 2, 'MarkerEdgeColor', colors(i));
 
     end
 
