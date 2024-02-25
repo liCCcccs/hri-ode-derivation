@@ -135,9 +135,9 @@ vSym_est.D_CFz = 100; vSym_est.D_CFx = 100; vSym_est.D_CMy = 10;
 %% Calculate equilibrium starting posiiton
 syms x_eq; % Define x_eq as symbolic variable
 equation = vSym.K_AFz * x_eq + vSym.K_BFx * x_eq == (vSym.m3 + vSym.m4) * vSym.g;
-x_eq_val = double(solve(equation, x_eq))
+x_eq_val = double(solve(equation, x_eq));
 %% solve the dynamic equations
-tspan = [0 :0.04: 4];
+tspan = [0 :0.04: 10];
 %tspan = 0:0.05:1;
 y0 = [q1, dq1, -pi/2, 0, 0, 0, x_eq_val, 0, 0, 0, -pi/2, 0];  %initial condition
 tau = [0, 0, 0, 0];
@@ -157,7 +157,7 @@ end
 % [t,y] = ode23(@(t,y) runrobot(t,y, tau, vSym), tspan, y0);
 
 %% observer
-tspan = [0 :0.04: 4];
+tspan = [0 :0.04: 10];
 %tspan = 0:0.05:1;
 y0 = [q1, dq1, -pi/2, 0, 0, 0, x_eq_val, 0, 0, 0, -pi/2, 0];  %initial condition
 tau = [0, 0, 0, 0];
@@ -359,24 +359,43 @@ function dydt = runobserver(t, y, tau, vSym, y_true)
         vVar.tau4 = 0;
     end
 
-    % Luenburger observer with 1 measurement (theta_r)
-    L = [1,1,1,1,1]*10;
-    ddq1 = 0;
-    r_q5_true = y_true[11];
-    [h_ddq2, r_ddd2, r_ddd3, r_ddq4, r_ddq5] = calc_equation_of_motion(vSym, vVar);
-    h_ddq2 = h_ddq2 + L(1) * (y_true - vVar.r_q5);
-    r_ddd2 = r_ddd2 + L(2) * (y_true - vVar.r_q5);
-    r_ddd3 = r_ddd3 + L(3) * (y_measure - vVar.r_q5);
-    r_ddq4 = r_ddq4 + L(4) * (y_measure - vVar.r_q5);
-    r_ddq5 = r_ddq5 + L(5) * (y_measure - vVar.r_q5);
+    % % Luenburger observer with 1 measurement (theta_r)
+    % L = [1,1,1,1,1]*10;
+    % ddq1 = 0;
+    % r_q5_true = y_true(11);
+    % [h_ddq2, r_ddd2, r_ddd3, r_ddq4, r_ddq5] = calc_equation_of_motion(vSym, vVar);
+    % h_ddq2 = h_ddq2 + L(1) * (r_q5_true - vVar.r_q5);
+    % r_ddd2 = r_ddd2 + L(2) * (r_q5_true - vVar.r_q5);
+    % r_ddd3 = r_ddd3 + L(3) * (r_q5_true - vVar.r_q5);
+    % r_ddq4 = r_ddq4 + L(4) * (r_q5_true - vVar.r_q5);
+    % r_ddq5 = r_ddq5 + L(5) * (r_q5_true - vVar.r_q5);
 
     % Luenburger observer with 7 measurement (theta_r, F_int)
-    L = ones(5,5)*10;
+    L = ones(5,7)*0.08;
+    L(:, 1) = 10;  % for the robot joint angle
+    %L(5, :) = 5;  % for the robot joint angle
+
     [h_ddq2, r_ddd2, r_ddd3, r_ddq4, r_ddq5] = calc_equation_of_motion(vSym, vVar);  % estimation
+    q1_true = y_true(:, 1); h_q2_true = y_true(:, 3); r_d2_true = y_true(:, 5); r_d3_true = y_true(:, 7); r_q4_true = y_true(:, 9); r_q5_true = y_true(:, 11);
+    dq1_true = y_true(:, 2); h_dq2_true = y_true(:, 4); r_dd2_true = y_true(:, 6); r_dd3_true = y_true(:, 8); r_dq4_true = y_true(:, 10); r_dq5_true = y_true(:, 12);
 
+    [f_intAi_true, f_intAj_true, tau_intAz_true, f_intBi_true, f_intBj_true, tau_intBz_true] = calcualte_interaction_force_torque(vSym, q1_true, h_q2_true, r_d2_true, r_d3_true, r_q4_true, r_q5_true, dq1_true, h_dq2_true, r_dd2_true, r_dd3_true, r_dq4_true, r_dq5_true);
+    [f_intAi_est, f_intAj_est, tau_intAz_est, f_intBi_est, f_intBj_est, tau_intBz_est] = calcualte_interaction_force_torque(vSym, vVar.q1, vVar.h_q2, vVar.r_d2, vVar.r_d3, vVar.r_q4, vVar.r_q5, vVar.dq1, vVar.h_dq2, vVar.r_dd2, vVar.r_dd3, vVar.r_dq4, vVar.r_dq5);
 
-
-
+    error_term = [r_q5_true - vVar.r_q5;
+                  f_intAi_true - f_intAi_est;
+                  f_intAj_true - f_intAj_est;
+                  tau_intAz_true - tau_intAz_est;
+                  f_intBi_true - f_intBi_est;
+                  f_intBj_true - f_intBj_est;
+                  tau_intBz_true - tau_intBz_est];
+    lb_term = L*error_term;
+    h_ddq2 = h_ddq2 + lb_term(1);
+    r_ddd2 = r_ddd2 + lb_term(2);
+    r_ddd3 = r_ddd3 + lb_term(3);
+    r_ddq4 = r_ddq4 + lb_term(4);
+    r_ddq5 = r_ddq5 + lb_term(5);
+    ddq1 = 0;
 
     dydt = zeros(12,1);
     dydt(1) = vVar.dq1; dydt(2) = ddq1;
@@ -385,10 +404,37 @@ function dydt = runobserver(t, y, tau, vSym, y_true)
     dydt(7) = vVar.r_dd3; dydt(8) = r_ddd3;
     dydt(9) = vVar.r_dq4; dydt(10) = r_ddq4;
     dydt(11) = vVar.r_dq5; dydt(12) = r_ddq5;
+
+    % Can we make use of the measured r_q5?
+    % dydt(11) = r_q5_true;  % this causes system unstable
+end
+
+function [f_intAi, f_intAj, tau_intAz, f_intBi, f_intBj, tau_intBz] = calcualte_interaction_force_torque(vSym, q1, h_q2, r_d2, r_d3, r_q4, r_q5, dq1, h_dq2, r_dd2, r_dd3, r_dq4, r_dq5)
+    % Assign values to symbols
+    l1 = vSym.l1;  l2 = vSym.l2;  l3 = vSym.l3;  l4 = vSym.l4;
+    lc1 = vSym.lc1;  la1 = vSym.la1;  lb1 = vSym.lb1;  lc2 = vSym.lc2;
+    lc3 = vSym.lc3;  lc4 = vSym.lc4;  la4 = vSym.la4;  la2 = vSym.la2;
+    K_AFz = vSym.K_AFz;  K_AFx = vSym.K_AFx;  K_AMy = vSym.K_AMy;
+    K_BFz = vSym.K_BFz;  K_BFx = vSym.K_BFx;  K_BMy = vSym.K_BMy;
+    K_CFz = vSym.K_CFz;  K_CFx = vSym.K_CFx;  K_CMy = vSym.K_CMy;
+    K_AFzN3 = vSym.K_AFzN3;  K_AFxN3 = vSym.K_AFxN3;  K_AMyN3 = vSym.K_AMyN3;
+    K_BFzN3 = vSym.K_BFzN3;  K_BFxN3 = vSym.K_BFxN3;  K_BMyN3 = vSym.K_BMyN3;
+    D_AFz = vSym.D_AFz;  D_AFx = vSym.D_AFx;  D_AMy = vSym.D_AMy;
+    D_BFz = vSym.D_BFz;  D_BFx = vSym.D_BFx;  D_BMy = vSym.D_BMy;
+    D_CFz = vSym.D_CFz;  D_CFx = vSym.D_CFx;  D_CMy = vSym.D_CMy;
+    m1 = vSym.m1;  m2 = vSym.m2;  m3 = vSym.m3;  m4 = vSym.m4;  g = vSym.g;
+    I_G1z = vSym.I_G1z;  I_G2z = vSym.I_G2z;  I_G3z = vSym.I_G3z;  I_G4z = vSym.I_G4z;
+
+    % This is for nonlinear interaction spring-damper
+    f_intBi = D_BFx*(r_dd2*cos(h_q2) + r_dd3*cos(h_q2) - h_dq2*l1*sin(h_q2) + r_d3*r_dq4*cos(h_q2) + r_d3*r_dq5*cos(h_q2) + la1*r_dq4*sin(h_q2) + la1*r_dq5*sin(h_q2) + r_d2*r_dq4*sin(h_q2) + r_d2*r_dq5*sin(h_q2) + l3*r_dq5*sin(h_q2 - r_q4)) - K_BFx*((la2*(cos(h_q2)*cos(q1 - pi/2) - sin(h_q2)*sin(q1 - pi/2)) + l1*cos(q1 - pi/2))*(cos(h_q2)*cos(q1 - pi/2) - sin(h_q2)*sin(q1 - pi/2)) + (la2*(cos(h_q2)*sin(q1 - pi/2) + sin(h_q2)*cos(q1 - pi/2)) + l1*sin(q1 - pi/2))*(cos(h_q2)*sin(q1 - pi/2) + sin(h_q2)*cos(q1 - pi/2)) + (cos(h_q2)*sin(q1 - pi/2) + sin(h_q2)*cos(q1 - pi/2))*(l3*(cos(q1)*cos(r_q4) - sin(q1)*sin(r_q4)) + cos(q1)*(la1 + r_d2) + r_d3*sin(q1) + la4*(cos(r_q5)*(cos(q1)*cos(r_q4) - sin(q1)*sin(r_q4)) - sin(r_q5)*(cos(q1)*sin(r_q4) + cos(r_q4)*sin(q1)))) - (cos(h_q2)*cos(q1 - pi/2) - sin(h_q2)*sin(q1 - pi/2))*(l3*(cos(q1)*sin(r_q4) + cos(r_q4)*sin(q1)) + sin(q1)*(la1 + r_d2) - r_d3*cos(q1) + la4*(cos(r_q5)*(cos(q1)*sin(r_q4) + cos(r_q4)*sin(q1)) + sin(r_q5)*(cos(q1)*cos(r_q4) - sin(q1)*sin(r_q4))))) - K_BFxN3*((la2*(cos(h_q2)*cos(q1 - pi/2) - sin(h_q2)*sin(q1 - pi/2)) + l1*cos(q1 - pi/2))*(cos(h_q2)*cos(q1 - pi/2) - sin(h_q2)*sin(q1 - pi/2)) + (la2*(cos(h_q2)*sin(q1 - pi/2) + sin(h_q2)*cos(q1 - pi/2)) + l1*sin(q1 - pi/2))*(cos(h_q2)*sin(q1 - pi/2) + sin(h_q2)*cos(q1 - pi/2)) + (cos(h_q2)*sin(q1 - pi/2) + sin(h_q2)*cos(q1 - pi/2))*(l3*(cos(q1)*cos(r_q4) - sin(q1)*sin(r_q4)) + cos(q1)*(la1 + r_d2) + r_d3*sin(q1) + la4*(cos(r_q5)*(cos(q1)*cos(r_q4) - sin(q1)*sin(r_q4)) - sin(r_q5)*(cos(q1)*sin(r_q4) + cos(r_q4)*sin(q1)))) - (cos(h_q2)*cos(q1 - pi/2) - sin(h_q2)*sin(q1 - pi/2))*(l3*(cos(q1)*sin(r_q4) + cos(r_q4)*sin(q1)) + sin(q1)*(la1 + r_d2) - r_d3*cos(q1) + la4*(cos(r_q5)*(cos(q1)*sin(r_q4) + cos(r_q4)*sin(q1)) + sin(r_q5)*(cos(q1)*cos(r_q4) - sin(q1)*sin(r_q4)))))^3;
+    f_intBj = - D_BFz*(r_dd2*sin(h_q2) + r_dd3*sin(h_q2) - la1*r_dq4*cos(h_q2) - la1*r_dq5*cos(h_q2) - r_d2*r_dq4*cos(h_q2) - r_d2*r_dq5*cos(h_q2) + r_d3*r_dq4*sin(h_q2) + r_d3*r_dq5*sin(h_q2) - l3*r_dq5*cos(h_q2 - r_q4) + h_dq2*l1*cos(h_q2)) - K_BFz*((la2*(cos(h_q2)*sin(q1 - pi/2) + sin(h_q2)*cos(q1 - pi/2)) + l1*sin(q1 - pi/2))*(cos(h_q2)*cos(q1 - pi/2) - sin(h_q2)*sin(q1 - pi/2)) - (la2*(cos(h_q2)*cos(q1 - pi/2) - sin(h_q2)*sin(q1 - pi/2)) + l1*cos(q1 - pi/2))*(cos(h_q2)*sin(q1 - pi/2) + sin(h_q2)*cos(q1 - pi/2)) + (cos(h_q2)*sin(q1 - pi/2) + sin(h_q2)*cos(q1 - pi/2))*(l3*(cos(q1)*sin(r_q4) + cos(r_q4)*sin(q1)) + sin(q1)*(la1 + r_d2) - r_d3*cos(q1) + la4*(cos(r_q5)*(cos(q1)*sin(r_q4) + cos(r_q4)*sin(q1)) + sin(r_q5)*(cos(q1)*cos(r_q4) - sin(q1)*sin(r_q4)))) + (cos(h_q2)*cos(q1 - pi/2) - sin(h_q2)*sin(q1 - pi/2))*(l3*(cos(q1)*cos(r_q4) - sin(q1)*sin(r_q4)) + cos(q1)*(la1 + r_d2) + r_d3*sin(q1) + la4*(cos(r_q5)*(cos(q1)*cos(r_q4) - sin(q1)*sin(r_q4)) - sin(r_q5)*(cos(q1)*sin(r_q4) + cos(r_q4)*sin(q1))))) - K_BFzN3*((la2*(cos(h_q2)*sin(q1 - pi/2) + sin(h_q2)*cos(q1 - pi/2)) + l1*sin(q1 - pi/2))*(cos(h_q2)*cos(q1 - pi/2) - sin(h_q2)*sin(q1 - pi/2)) - (la2*(cos(h_q2)*cos(q1 - pi/2) - sin(h_q2)*sin(q1 - pi/2)) + l1*cos(q1 - pi/2))*(cos(h_q2)*sin(q1 - pi/2) + sin(h_q2)*cos(q1 - pi/2)) + (cos(h_q2)*sin(q1 - pi/2) + sin(h_q2)*cos(q1 - pi/2))*(l3*(cos(q1)*sin(r_q4) + cos(r_q4)*sin(q1)) + sin(q1)*(la1 + r_d2) - r_d3*cos(q1) + la4*(cos(r_q5)*(cos(q1)*sin(r_q4) + cos(r_q4)*sin(q1)) + sin(r_q5)*(cos(q1)*cos(r_q4) - sin(q1)*sin(r_q4)))) + (cos(h_q2)*cos(q1 - pi/2) - sin(h_q2)*sin(q1 - pi/2))*(l3*(cos(q1)*cos(r_q4) - sin(q1)*sin(r_q4)) + cos(q1)*(la1 + r_d2) + r_d3*sin(q1) + la4*(cos(r_q5)*(cos(q1)*cos(r_q4) - sin(q1)*sin(r_q4)) - sin(r_q5)*(cos(q1)*sin(r_q4) + cos(r_q4)*sin(q1)))))^3;
+    tau_intBz = K_BMy*(r_q4 + r_q5 - h_q2) + K_BMyN3*(r_q4 + r_q5 - h_q2)^3 + D_BMy*(r_dq4 + r_dq5 - h_dq2);
+    f_intAi = K_AFx * r_d2 + K_AFxN3 * r_d2^3 +  D_AFx * r_dd2;
+    f_intAj = - K_AFz * r_d3 + K_AFzN3 * r_d3^3 - D_AFz * r_dd3;
+    tau_intAz  = K_AMy*r_q4 + K_AMyN3*r_q4^3 + D_AMy*r_dq4;
 end
 
 function [h_ddq2, r_ddd2, r_ddd3, r_ddq4, r_ddq5] = calc_equation_of_motion(vSym, vVar)
-
     % Assign values to symbols
     l1 = vSym.l1;  l2 = vSym.l2;  l3 = vSym.l3;  l4 = vSym.l4;
     lc1 = vSym.lc1;  la1 = vSym.la1;  lb1 = vSym.lb1;  lc2 = vSym.lc2;
