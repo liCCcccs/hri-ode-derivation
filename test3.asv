@@ -1,0 +1,90 @@
+m1 = 1;
+m2 = 2;
+K = 10;
+m1_wrong = 1;
+m2_wrong = 2;
+K_wrong = 10;
+
+%% System nominal model
+A_n = [0, 1;
+       0, 0];
+B_n = [0, 0;
+       -1/m1, 1/m2];
+C_n = [1, 0; eye(2,2)];
+D_n = [-1/K, 0;
+       0, 0;
+       0, 0];
+
+%% Model in KF
+A = [0, 1;
+     0, 0];
+B = [0, 0;
+     -1/m1_wrong, 1/m2_wrong];
+C = [1, 0];
+D = [-1/K_wrong, 0];
+
+Ob = obsv( A, C);
+
+%% Kalman Filter
+Ts = -1;
+sys = ss(A_n,[B_n B_n],C_n,[D_n D_n],Ts,'InputName',{'u1' 'u2' 'w1' 'w2'},'OutputName',{'yt1', 'xt1', 'xt2'});  % Plant dynamics and additive input noise w
+sysKF = ss(A,[B B],C,[D D],Ts,'InputName',{'u1' 'u2' 'w1' 'w2'},'OutputName',{'yf1'});  % Plant dynamics and additive input noise w
+
+Q = [1 0; 0 1]; 
+R = 0.00;
+
+[kalmf,L,~,Mx,Z] = kalman(sysKF,Q,R);
+%kalmf = kalmf([1,2],:);
+
+%% Simulate System
+sys.InputName = {'u1', 'u2', 'w1', 'w2'};
+sys.OutputName = {'yt1', 'xt1', 'xt2'};
+vIn1 = sumblk('y1 = yt1 + v1');
+
+kalmf.InputName = {'u1', 'uf2','y1'};
+kalmf.OutputName = {'ye1', 'xe1', 'xe2'};
+
+SimModel = connect(sys,vIn1, kalmf,{'u1', 'u2', 'uf2', 'w1', 'w2','v1'},{'yt1', 'xt1', 'xt2', 'ye1', 'xe1', 'xe2'});
+
+t = (0:100)';
+u1 = 10*sin(t/10);
+u2 = 10*sin(t/5);
+uf2 = 10*sin(t/5);
+
+rng(10,'twister');
+w1 = zeros(length(t),1); %sqrt(Q(1,1))*randn(length(t),1);
+w2 = zeros(length(t),1); %sqrt(Q(2,2))*randn(length(t),1);
+v1 = zeros(length(t),1); %sqrt(R(1,1))*randn(length(t),1);
+
+out = lsim(SimModel,[u1, u2, uf2, w1, w2, v1]);
+
+yt1 = out(:,1);   % true response
+xt1 = out(:,2);   % true response
+xt2 = out(:,3);   % true response
+
+
+ye1 = out(:,4);  % filtered response
+xe1 = out(:,5);  % filtered response
+xe2 = out(:,6);  % filtered response
+
+
+y1 = yt1 + v1;     % measured response
+
+%% Visualise
+clf
+figure('Renderer', 'painters', 'Position', [300 200 800 500])
+subplot(2,1,1); plot(t,xt1,'b',t,xe1,'r--');
+xlabel('Number of Samples'), ylabel('Output')
+title('x2')
+legend('True','Filtered')
+subplot(2,1,2); plot(t,xt2,'b',t,xe2,'r--');
+title('x2 dot')
+legend('True','Filtered')
+% subplot(212), plot(t,yt-y,'g',t,yt-ye,'r--'),
+% xlabel('Number of Samples'), ylabel('Error')
+% legend('True - measured','True - filtered')
+
+
+
+
+

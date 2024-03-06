@@ -1,0 +1,27 @@
+
+syms theta
+syms dt
+syms omega
+syms m2 J l kA kB g
+syms q1
+syms tauB tau2 fB
+
+f1 = theta + omega * dt;
+f2 = omega + dt * ((l*m2*g*sin(q1+theta)) / (m2*l^2+J) - (tauB-tau2-l*fB)/(m2*l^2+J));
+
+diff(f2, theta)
+diff(f2, omega)
+diff(f2, kA)
+diff(f2, kB)
+
+
+
+
+
+
+
+
+
+
+
+
